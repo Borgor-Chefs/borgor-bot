@@ -1,6 +1,7 @@
 require("dotenv").config()
 const { REST } = require("@discordjs/rest")
 const { Routes } = require("discord-api-types/v10")
+const { CommandInteraction } = require("discord.js")
 const { Client, Intents, Collection } = require("discord.js")
 const fs = require("fs")
 
@@ -59,7 +60,7 @@ client.on('interactionCreate', async (interaction) =>{
         if(!command) return
 
         try{
-            await command.execute(interaction)
+            await command.execute(interaction, client)
         } catch(err){
             if (err) console.error(err)
 
