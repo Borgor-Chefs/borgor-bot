@@ -39,11 +39,38 @@ client.on('ready', (bot)=>{
             if(process.env.ENV === "production"){
                 await rest.put(Routes.applicationCommands(CLIENT_ID), {
                     body: commands
+                }).then(()=>{
+
                 })
                 console.log("Commands registered globally!")
             } else{
                 await rest.put(Routes.applicationGuildCommands(CLIENT_ID, process.env.GUILD), {
                     body: commands
+                }).then(async (jsonCommands)=>{
+                    for(let i = 0; i < jsonCommands.length; i++){
+                        const appCommand = await client.guilds.cache.get(process.env.GUILD)?.commands.fetch(jsonCommands[i].id)
+                        const commandObject = client.commands.get(jsonCommands[i].name)
+                        
+                        if(!commandObject.hasPermission) continue;
+
+                        appCommand.setDefaultPermission(false)
+
+                        let permissions = []
+
+                        for(var _type in commandObject.PermissionSettings){
+                            for(var _id in commandObject.PermissionSettings[_type]){
+                                var _permission = commandObject.PermissionSettings[_type][_id]
+                                permissions.push({
+                                    type: _type,
+                                    id: _id,
+                                    permission: _permission
+                                })
+                            }
+                        }
+
+                        appCommand.permissions.set({permissions})
+
+                    }
                 })
                 console.log("Commands registered onto local server!")
             }
@@ -57,9 +84,7 @@ client.on('ready', (bot)=>{
 client.on('interactionCreate', async (interaction) =>{
     if(interaction.isCommand()){
         const command = client.commands.get(interaction.commandName)
-
         if(!command) return
-
         try{
             await command.execute(interaction, client)
         } catch(err){

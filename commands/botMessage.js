@@ -17,5 +17,13 @@ module.exports = {
         })
         const channel = client.channels.cache.find(channel => channel.id == interaction.channelId)
         await channel.send(interaction.options.getString("message"))
-    }
+    },
+    hasPermission: true,
+    PermissionSettings: {
+        "ROLE": {
+            "951694488605184050": true
+        },
+        "USER": {}
+    },
+
 }
