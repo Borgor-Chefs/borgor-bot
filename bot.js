@@ -1,103 +1,75 @@
-//Borgor-Bot at its finest!
+const { Client, Events, GatewayIntentBits, Collection } = require('discord.js')
 require("dotenv").config()
-const { REST } = require("@discordjs/rest")
-const { Routes } = require("discord-api-types/v10")
-const { CommandInteraction } = require("discord.js")
-const { Client, Intents, Collection } = require("discord.js")
-const fs = require("fs")
+const { Player } = require('discord-player') 
 
-//Setting up Bot Permissions
-const client = new Client({
-    intents: [ Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES ]
-})
+const fs = require('fs')
+const path = require('path')
+
+const commandsPath = path.join(__dirname, 'commands')
+
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] })
 
 
-//Registering command files
-const commandFiles = fs.readdirSync("./commands").filter(file => file.endsWith(".js"))
-const commands = [];
 client.commands = new Collection()
 
-for (const file of commandFiles){
-    const command = require(`./commands/${file}`)
-    commands.push(command.data.toJSON())
-    client.commands.set(command.data.name, command)
-    console.log(`Loaded command ${file} to bot!`)
+function loadCommands(_path = ''){
+    const _cPath = path.join(commandsPath, _path)
+    const commandFiles = fs.readdirSync(_cPath)
+
+    console.log(commandFiles)
+    for(cFile of commandFiles){
+        if(!cFile.endsWith('.js')){
+            loadCommands(`${_path}/${cFile}`)
+        }else{
+            const cFilePath = path.join(_cPath, cFile)
+            const command = require(cFilePath)
+            if('data' in command && 'execute' in command){
+                console.log(`Loading command ${command.data.name}!`)
+                client.commands.set(command.data.name, command)
+            }else{
+                console.log(`[WARNING] Command at ${cFilePath} is missing 'Data' and 'Execute' attributes!`)
+            }
+        }
+    }
 }
 
-//When the bot is online and running!
-client.on('ready', (bot)=>{
-    console.log(bot.user.username + " is alive!")
 
-    const CLIENT_ID = client.user.id
+client.once(Events.ClientReady, c=>{
+    console.log(`Logged in as ${c.user.tag}` )
 
-    const rest = new REST({
-        version: "10"
-    }).setToken(process.env.BOTTOKEN);
-
-    (async ()=>{
-        try{
-            if(process.env.ENV === "production"){
-                await rest.put(Routes.applicationCommands(CLIENT_ID), {
-                    body: commands
-                }).then(()=>{
-
-                })
-                console.log("Commands registered globally!")
-            } else{
-                await rest.put(Routes.applicationGuildCommands(CLIENT_ID, process.env.GUILD), {
-                    body: commands
-                }).then(async (jsonCommands)=>{
-                    for(let i = 0; i < jsonCommands.length; i++){
-                        const appCommand = await client.guilds.cache.get(process.env.GUILD)?.commands.fetch(jsonCommands[i].id)
-                        const commandObject = client.commands.get(jsonCommands[i].name)
-                        
-                        if(!commandObject.hasPermission) continue;
-
-                        appCommand.setDefaultPermission(false)
-
-                        let permissions = []
-
-                        for(var _type in commandObject.PermissionSettings){
-                            for(var _id in commandObject.PermissionSettings[_type]){
-                                var _permission = commandObject.PermissionSettings[_type][_id]
-                                permissions.push({
-                                    type: _type,
-                                    id: _id,
-                                    permission: _permission
-                                })
-                            }
-                        }
-
-                        appCommand.permissions.set({permissions})
-
-                    }
-                })
-                console.log("Commands registered onto local server!")
-            }
-        } catch(err){
-            if (err) console.error(err)
-        }
-    })()
+    loadCommands()
 })
 
-//On interaction
-client.on('interactionCreate', async (interaction) =>{
-    if(interaction.isCommand()){
-        const command = client.commands.get(interaction.commandName)
-        if(!command) return
-        try{
-            await command.execute(interaction, client)
-        } catch(err){
-            if (err) console.error(err)
 
-            await interaction.reply({
-                content: "An error occured while executing that command.",
-                ephemeral: true
-            })
+client.on(Events.InteractionCreate, async interaction =>{
+    if(!interaction.isChatInputCommand()) return
+    
+    const command = interaction.client.commands.get(interaction.commandName)
+
+    if(!command){
+        console.error(`No command matching ${interaction.commandName} was found..`)
+        return
+    }
+
+    try {
+        await command.execute(interaction)
+    } catch(error) {
+        console.error(error)
+        if(interaction.replied || interaction.deferred){
+            await interaction.followUp({content: "There was an error while executing this command!", ephemeral: true})
+        }else{
+            await interaction.reply({content: "There was an error while executing this command!", ephemeral: true})
         }
     }
 })
 
 
-//Logging into Discord API
+client.player = new Player(client, {
+    ytdlOptions: {
+        quality: "highestaudio",
+        highWaterMark: 1 << 25
+    }
+})
+
+
 client.login(process.env.BOTTOKEN)
